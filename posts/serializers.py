@@ -13,19 +13,19 @@ class PostSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Post
-        fields = ['id', 'title', 'content', 'author', 'tags', 'file', 'image', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'content', 'author', 'tags', 'file', 'image', 'used_model', 'model_version', 'created_at', 'updated_at']
         read_only_fields = ['created_at', 'updated_at']
 
 class PostCreateSerializer(serializers.ModelSerializer):
     tag_names = serializers.ListField(
-        child=serializers.CharField(),
+        child=serializers.CharField(max_length=50),
         write_only=True,
         required=False
     )
     
     class Meta:
         model = Post
-        fields = ['title', 'content', 'tag_names', 'file', 'image']
+        fields = ['title', 'content', 'tag_names', 'file', 'image', 'used_model', 'model_version']
     
     def create(self, validated_data):
         tag_names = validated_data.pop('tag_names', [])

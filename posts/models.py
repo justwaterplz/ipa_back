@@ -16,6 +16,8 @@ class Post(models.Model):
     tags = models.ManyToManyField(Tag, through='PostTag')
     file = models.FileField(upload_to='posts/files/', null=True, blank=True)
     image = models.ImageField(upload_to='posts/images/', null=True, blank=True)
+    used_model = models.CharField(max_length=100, null=True, blank=True)
+    model_version = models.CharField(max_length=50, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
