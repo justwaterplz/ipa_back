@@ -6,3 +6,5 @@ ENV/
 __pycache__/
 *.py[cod]
 *$py.class
+*/site-packages/
+**/site-packages/
