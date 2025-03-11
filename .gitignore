@@ -1,10 +1,26 @@
-Copyvenv/
+# 가상환경
+venv/
 env/
 .env/
 .venv/
 ENV/
+
+# 파이썬 캐시 파일
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+
+# 사이트 패키지
 */site-packages/
 **/site-packages/
+
+# 이미지 파일
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.ico
