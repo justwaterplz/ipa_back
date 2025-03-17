@@ -138,8 +138,9 @@ class UserViewSet(viewsets.ModelViewSet):
         """사용자의 프로필 이미지를 업로드/변경합니다."""
         print(f"프로필 이미지 업로드 요청 받음: 메서드={request.method}, 경로={request.path}")
         print(f"요청 헤더: {request.headers}")
-        print(f"요청 데이터: {request.data}")
-        print(f"요청 FILES: {request.FILES}")
+        print(f"요청 데이터 타입: {type(request.data)}")
+        print(f"요청 데이터 키: {request.data.keys() if hasattr(request.data, 'keys') else 'No keys'}")
+        print(f"요청 FILES 키: {request.FILES.keys() if hasattr(request.FILES, 'keys') else 'No keys'}")
         
         try:
             user = self.get_object()
@@ -151,20 +152,33 @@ class UserViewSet(viewsets.ModelViewSet):
                                status=status.HTTP_403_FORBIDDEN)
             
             # 이미지 파일 확인
-            if 'image' not in request.data and 'image' not in request.FILES:
-                print("이미지 파일 누락: request.data와 request.FILES에 'image' 필드가 없음")
-                # profile_image 필드도 확인
-                if 'profile_image' in request.data or 'profile_image' in request.FILES:
-                    print("'profile_image' 필드 발견, 이를 'image'로 처리")
-                    if 'profile_image' in request.FILES:
-                        request.FILES['image'] = request.FILES['profile_image']
-                    else:
-                        request.data._mutable = True
-                        request.data['image'] = request.data['profile_image']
-                        request.data._mutable = False
-                else:
-                    return Response({'error': '이미지 파일이 제공되지 않았습니다.'}, 
-                                  status=status.HTTP_400_BAD_REQUEST)
+            image_file = None
+            
+            # 먼저 request.FILES에서 이미지 찾기
+            if 'image' in request.FILES:
+                image_file = request.FILES['image']
+                print(f"request.FILES['image'] 발견: {image_file.name}, 크기: {image_file.size}")
+            elif 'profile_image' in request.FILES:
+                image_file = request.FILES['profile_image']
+                print(f"request.FILES['profile_image'] 발견: {image_file.name}, 크기: {image_file.size}")
+            # 그 다음 request.data에서 이미지 찾기
+            elif 'image' in request.data:
+                image_file = request.data['image']
+                print(f"request.data['image'] 발견: 타입: {type(image_file)}")
+            elif 'profile_image' in request.data:
+                image_file = request.data['profile_image']
+                print(f"request.data['profile_image'] 발견: 타입: {type(image_file)}")
+            
+            if not image_file:
+                return Response({'error': '이미지 파일이 제공되지 않았습니다.'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # 이미지 파일 타입 확인
+            print(f"이미지 파일 타입: {type(image_file)}")
+            if hasattr(image_file, 'name'):
+                print(f"이미지 파일 이름: {image_file.name}")
+            if hasattr(image_file, 'size'):
+                print(f"이미지 파일 크기: {image_file.size}")
             
             # 기존 이미지가 있으면 삭제
             if user.profile_image:
@@ -172,17 +186,34 @@ class UserViewSet(viewsets.ModelViewSet):
                 if os.path.exists(old_image_path):
                     os.remove(old_image_path)
             
-            # 새 이미지 저장
-            image_field = 'image'
-            if image_field in request.FILES:
-                user.profile_image = request.FILES[image_field]
-            else:
-                user.profile_image = request.data[image_field]
+            # 새 이미지 저장 - 직접 파일 저장 방식으로 변경
+            file_ext = os.path.splitext(image_file.name)[1] if hasattr(image_file, 'name') else '.jpg'
+            filename = f"profile_{user.id}{file_ext}"
+            upload_path = os.path.join('profile_images', filename)
+            full_path = os.path.join(settings.MEDIA_ROOT, upload_path)
+            
+            # 디렉토리 확인
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            
+            # 파일 저장
+            with open(full_path, 'wb+') as destination:
+                if hasattr(image_file, 'chunks'):
+                    for chunk in image_file.chunks():
+                        destination.write(chunk)
+                else:
+                    destination.write(image_file.read())
+            
+            # 사용자 모델 업데이트
+            user.profile_image = upload_path
             user.save()
+            
+            # 이미지 URL 생성
+            image_url = request.build_absolute_uri(f"{settings.MEDIA_URL}{upload_path}")
+            print(f"생성된 이미지 URL: {image_url}")
             
             return Response({
                 'message': '프로필 이미지가 업데이트되었습니다.',
-                'profile_image': request.build_absolute_uri(user.profile_image.url) if user.profile_image else None
+                'profile_image': image_url
             })
         except Exception as e:
             print(f"프로필 이미지 업로드 중 오류 발생: {str(e)}")
