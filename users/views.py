@@ -404,6 +404,7 @@ class AdminRequestViewSet(viewsets.ModelViewSet):
     def approve(self, request, pk=None):
         """관리자 요청을 승인합니다."""
         admin_request = self.get_object()
+        print(f"승인 요청 처리: request_id={admin_request.id}, request_type={admin_request.request_type}")
         
         # 관리자 권한 확인
         if not (request.user.is_staff or request.user.is_superuser or request.user.is_admin):
@@ -417,12 +418,39 @@ class AdminRequestViewSet(viewsets.ModelViewSet):
         admin_request.status = 'approved'
         admin_request.admin_note = request.data.get('admin_note', '')
         admin_request.save()
+        print(f"요청 상태 업데이트 완료: status={admin_request.status}")
         
         # 권한 신청인 경우 사용자 상태도 업데이트
         if admin_request.request_type == 'permission_request':
-            user = admin_request.user
-            user.status = 'approved'
-            user.save()
+            try:
+                # 사용자 ID 확인
+                user_id = admin_request.user.id
+                print(f"사용자 ID: {user_id}")
+                
+                # 데이터베이스에서 사용자 직접 조회
+                user = User.objects.get(id=user_id)
+                print(f"사용자 조회 성공: username={user.username}, 현재 status={user.status}")
+                
+                # 상태 업데이트
+                user.status = 'approved'
+                user.save(update_fields=['status', 'updated_at'])
+                print(f"사용자 상태 업데이트 시도: 새 status={user.status}")
+                
+                # 데이터베이스에서 다시 조회하여 확인
+                updated_user = User.objects.get(id=user_id)
+                print(f"업데이트 확인: username={updated_user.username}, 새 status={updated_user.status}")
+                
+                # 추가 확인: 직접 SQL 쿼리 실행
+                from django.db import connection
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT status FROM users_user WHERE id = %s", [str(user_id)])
+                    row = cursor.fetchone()
+                    if row:
+                        print(f"SQL 쿼리 결과: status={row[0]}")
+            except Exception as e:
+                print(f"사용자 상태 업데이트 중 오류 발생: {str(e)}")
+        else:
+            print(f"권한 신청이 아니므로 사용자 상태 업데이트 생략: request_type={admin_request.request_type}")
         
         return Response({
             'success': True,
