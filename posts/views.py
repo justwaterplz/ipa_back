@@ -16,9 +16,14 @@ User = get_user_model()
 
 class PostViewSet(viewsets.ModelViewSet):
     """게시물 CRUD API"""
-    permission_classes = [AllowAny]  # 개발 중 테스트를 위해 임시로 변경
+    permission_classes = [AllowAny]  # 기본적으로 모든 사용자가 조회 가능
     serializer_class = PostSerializer
     parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated()]
+        return [AllowAny()]
 
     def get_queryset(self):
         queryset = Post.objects.all()
@@ -101,33 +106,14 @@ class PostViewSet(viewsets.ModelViewSet):
         return PostSerializer
 
     def perform_create(self, serializer):
-        # 인증된 사용자가 있으면 해당 사용자를 작성자로 설정
-        if self.request.user.is_authenticated:
-            serializer.save(author=self.request.user)
-        else:
-            # 테스트를 위해 임시로 첫 번째 사용자를 작성자로 설정
-            user = User.objects.first()
-            if user:
-                serializer.save(author=user)
-            else:
-                raise serializers.ValidationError("게시물을 생성하려면 최소한 한 명의 사용자가 필요합니다.")
+        serializer.save(author=self.request.user)
 
     @action(detail=True, methods=['post'])
     def bookmark(self, request, pk=None):
         """게시물 북마크"""
         post = self.get_object()
-        
-        # 인증된 사용자가 있으면 해당 사용자로 북마크 처리
-        if request.user.is_authenticated:
-            user = request.user
-        else:
-            # 테스트를 위해 임시로 첫 번째 사용자 사용
-            user = User.objects.first()
-            if not user:
-                return Response({"error": "북마크를 추가하려면 최소한 한 명의 사용자가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
-        
         bookmark, created = Bookmark.objects.get_or_create(
-            user=user,
+            user=request.user,
             post=post
         )
         if not created:
@@ -137,7 +123,7 @@ class PostViewSet(viewsets.ModelViewSet):
 
 class TagListView(generics.ListAPIView):
     """태그 목록 API"""
-    permission_classes = [AllowAny]  # 개발 중 테스트를 위해 임시로 변경
+    permission_classes = [AllowAny]
     serializer_class = TagSerializer
 
     def get_queryset(self):
@@ -148,32 +134,16 @@ class TagListView(generics.ListAPIView):
 
 class UserPostsView(generics.ListAPIView):
     """사용자의 게시물 목록 API"""
-    permission_classes = [AllowAny]  # 개발 중 테스트를 위해 임시로 변경
+    permission_classes = [IsAuthenticated]
     serializer_class = PostSerializer
 
     def get_queryset(self):
-        # 인증된 사용자가 있으면 해당 사용자의 게시물 반환
-        if self.request.user.is_authenticated:
-            return Post.objects.filter(author=self.request.user).order_by('-created_at')
-        else:
-            # 테스트를 위해 임시로 첫 번째 사용자의 게시물 반환
-            user = User.objects.first()
-            if user:
-                return Post.objects.filter(author=user).order_by('-created_at')
-            return Post.objects.none()
+        return Post.objects.filter(author=self.request.user).order_by('-created_at')
 
 class UserBookmarksView(generics.ListAPIView):
     """사용자의 북마크 목록 API"""
-    permission_classes = [AllowAny]  # 개발 중 테스트를 위해 임시로 변경
+    permission_classes = [IsAuthenticated]
     serializer_class = PostSerializer
 
     def get_queryset(self):
-        # 인증된 사용자가 있으면 해당 사용자의 북마크 반환
-        if self.request.user.is_authenticated:
-            return Post.objects.filter(bookmark__user=self.request.user).order_by('-created_at')
-        else:
-            # 테스트를 위해 임시로 첫 번째 사용자의 북마크 반환
-            user = User.objects.first()
-            if user:
-                return Post.objects.filter(bookmark__user=user).order_by('-created_at')
-            return Post.objects.none()
+        return Post.objects.filter(bookmark__user=self.request.user).order_by('-created_at')

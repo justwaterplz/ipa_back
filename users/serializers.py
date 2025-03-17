@@ -1,12 +1,15 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User
+from .models import User, AdminRequest
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 class UserSerializer(serializers.ModelSerializer):
+    user_status = serializers.ReadOnlyField()
+    
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'profile_image', 'is_admin', 'created_at', 'updated_at')
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        fields = ('id', 'username', 'email', 'profile_image', 'is_admin', 'status', 'user_status', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'created_at', 'updated_at', 'user_status')
 
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
@@ -66,4 +69,59 @@ class LoginSerializer(serializers.Serializer):
         
         return {
             'user': user
-        } 
+        }
+
+class AdminRequestSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = AdminRequest
+        fields = ('id', 'user', 'request_type', 'message', 'status', 'admin_note', 'created_at', 'updated_at', 'name', 'department')
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+class AdminRequestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminRequest
+        fields = ('request_type', 'message', 'name', 'department')
+        
+    def create(self, validated_data):
+        user = self.context['request'].user
+        admin_request = AdminRequest.objects.create(user=user, **validated_data)
+        return admin_request
+
+class AdminRequestUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminRequest
+        fields = ('status', 'admin_note')
+        
+    def validate_status(self, value):
+        if value not in ['approved', 'rejected']:
+            raise serializers.ValidationError("상태는 'approved' 또는 'rejected'만 가능합니다.")
+        return value
+
+# 커스텀 JWT 토큰 시리얼라이저 - 이메일로 로그인
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    username_field = 'email'
+    
+    def validate(self, attrs):
+        email = attrs.get('email')
+        password = attrs.get('password')
+        
+        if email and password:
+            try:
+                user = User.objects.get(email=email)
+                if user.check_password(password):
+                    # 인증 성공
+                    refresh = self.get_token(user)
+                    data = {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                        'user': UserSerializer(user).data
+                    }
+                    return data
+                else:
+                    raise serializers.ValidationError('비밀번호가 일치하지 않습니다.')
+            except User.DoesNotExist:
+                raise serializers.ValidationError('해당 이메일로 등록된 사용자가 없습니다.')
+        else:
+            raise serializers.ValidationError('이메일과 비밀번호를 모두 입력해주세요.') 
